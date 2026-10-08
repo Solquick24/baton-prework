@@ -1,18 +1,17 @@
 # API workspace
 
-TypeScript Lambda 백엔드의 자리다. 함수·비즈니스 로직·AWS SDK 의존성은 아직 없다.
+로컬 TypeScript/Fastify API의 자리다. 소스·의존성·DB는 아직 없고 설정 뼈대만 있다.
 
-- `handlers`: 요청 검증 → 인증·권한 → 기능 모듈 → 응답의 얇은 진입점.
-- `modules`: 구성원·진료·질문·브리핑·정리·불일치·작업의 기능 로직.
-- `auth`: 환자별 구성원·작업 권한·필드 허용·원문 접근 공통 검사.
-- `ai/prompts`: 진단·처방·수치 해석 금지와 근거 요구를 명시한 프롬프트.
-- `ai/pipelines`: 환자·진료과·공유 목적별 입력 구성과 출력 검증.
-- `ai/safety`: 근거 누락·금지 출력·권한 밖 정보 확인.
-- `adapters`: DynamoDB·S3·Cognito·Bedrock·Transcribe 연결.
-- `workers`: 긴 작업의 실행·상태·결과·실패·재시도.
-- `shared`: 설정·오류·로그; 원문·음성을 로그에 그대로 남기지 않는다.
-- `tests`: 권한 우회·원문 접근·AI 입력 제한·불일치 비교의 실제 테스트 자리.
+- handlers: HTTP routes; 요청 검증→인증·관계·행동 권한→기능 모듈→허용 블록 응답.
+- modules: members·visits·questions·briefing·summaries·alerts·jobs.
+- auth: JWT·매 요청 현재 관계·scope→kind 화이트리스트·위임·원문 검사.
+- adapters: SQLite·로컬 files·Bedrock·Transcribe·fixture 연결.
+- ai: 생성 입력의 환자·진료과·목적 제한, 세블록 출력·근거·혼입 검증.
+- workers: 로컬 비동기 실행·SQLite 작업 상태·재시도·재시작 처리.
+- shared: 설정·오류·로그; 원문·토큰을 로그에 남기지 않는다.
+- tests: 실제 계약·권한·블록 미조회·AI 입력·공유 보류 검증의 자리.
 
-API별 인증·권한 검사를 수행하고 S3 URL과 작업 결과에도 동일 정책을 적용한다.
-구현 착수 시 TypeScript·Node 타입·필요 AWS SDK·esbuild와 실제 빌드 명령을 추가한다.
-명세: [spec.md](../../specs/001-baton-mvp/spec.md).
+앱 저장·로그인은로컬, AI만AWS. 원문은full 전용이고 로컬파일은 공개static에 두지 않는다.
+POST share 이전 결과를 자동 공유하지 않는다. GET와scope변경은AI를 부르지 않는다.
+기존.env.example의Cognito/DynamoDB/S3영구저장 값은 이전 예시이며 Setup에서 로컬값으로 교체한다.
+구현목록: [tasks.md](../../specs/001-baton-mvp/tasks.md).

@@ -1,31 +1,32 @@
-# 바통 아키텍처
+# 바통 아키텍처 — 최종 기획안 반영
 
-현재 상태는 설정·디렉터리 뼈대이며 기능과 AWS 자원은 없다.
+사용자 선택: 로컬 서버·SQLite·시드 로그인, AI만 AWS. 배포 없이 로컬 시연한다.
+현재는 문서와 빈 소스 폴더이며 아래 흐름은 향후 구현 설계다.
 
 ```mermaid
 flowchart LR
-    Web[React 모바일 웹] --> Auth[Cognito 인증]
-    Web --> API[HTTP API / Lambda]
-    API --> Policy[환자별 권한·필드 검사]
-    Policy --> Modules[기능 모듈]
-    Modules --> DB[DynamoDB]
-    Modules --> Files[비공개 S3]
-    Modules --> Jobs[비동기 작업]
-    Jobs --> AI[Transcribe / Bedrock]
-    AI --> Check[근거·안전·출력 검증]
-    Check --> DB
+    Web[React/Vite 모바일 웹] --> API[로컬 Fastify API]
+    API --> Auth[시드 JWT·현행 구성원·허용 블록]
+    Auth --> DB[SQLite meta·visit_blocks·jobs·sharelog]
+    Auth --> Files[비공개 로컬 files]
+    API --> Worker[로컬 작업 runner]
+    Worker --> AWS[Bedrock·Transcribe]
+    AWS --> Check[스키마·근거·문자열 혼입 검사]
+    Check --> Draft[검토본·공유 보류]
+    Draft --> Share[사용자 공유 확정]
+    Share --> DB
 ```
 
-- web: 화면·접근성·허용 응답 표시. 인증 상태를 관리하되 권한 보장은 서버에서 수행.
-- api: 환자·구성원·작업·원문 접근 검사와 기능 모듈·비동기·AI 파이프라인.
-- contracts: API DTO와 런타임 스키마만 공유. DB·AWS·비밀 설정 제외.
-- infra: 프론트 Hosting과 SAM 자원 설계; 현재 미배포.
-- fixtures: 일관된 가상 자료와 정답; 공개 웹 assets와 분리.
+- web: 낮은 범위에 없는 블록을 그리지 않고 원문 버튼은 full일 때만 표시한다.
+- api: JWT 검증 후 매 요청의 DB 관계로 행동·블록·원문 권한을 검사한다.
+- contracts: schedule/companion/full DTO·요청·오류·작업 상태·런타임 검증 스키마.
+- adapters: SQLite·로컬 files·AWS AI·fixture. 앱 저장·인증에는 AWS를 사용하지 않는다.
+- workers: 작업 ID·SQLite 상태·재시도·재시작 실패 처리. 클라우드 배포 없음.
+- fixtures: 4계정·관찰 메모·등급별 저장 결과·약20 모의 문서와 평가 라벨.
 
-AI 출력 검증 → 요약 저장·공유 상태 반영 → 현행 권한으로 조회한다.
-환자·진료과 선택과 비공개 메모 제외는 AI 호출 전 적용한다.
-출력 공개 시에도 scope별 허용 필드·인용을 검사해 요약을 통한 정보 누출을 막는다.
+AI 생성은 세 블록을 함께 저장한다. 조회와 범위 변경은 허용 블록만 읽고 AI 호출은0회다.
+companion에는 원문·인용·근거 위치·변경 이유가 없고, 상세 불일치는 full에만 있다.
+Transcribe 배치에는 기존 제공 S3 버킷의 임시 staging이 필요하며 영구 자료는 로컬에 둔다.
 
-설계 상세: [구현 계획](../specs/001-baton-mvp/plan.md),
-[데이터 모델](../specs/001-baton-mvp/data-model.md),
-[API 계약](../specs/001-baton-mvp/contracts/api.md).
+설계: [plan](../specs/001-baton-mvp/plan.md) · [data model](../specs/001-baton-mvp/data-model.md)
+· [contract](../specs/001-baton-mvp/contracts/api.md) · [tasks](../specs/001-baton-mvp/tasks.md).

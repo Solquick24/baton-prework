@@ -1,73 +1,71 @@
-# API Contract Draft: 바통 MVP
+# API Contract Draft: 로컬 서버·등급별 블록·검토 후 공유
 
-설계 문서이며 아직 경로·DTO·handler를 구현하지 않았다.
-공유 런타임 스키마는 `packages/contracts/src/`에, DB 항목은 API 내부에 둔다.
+아직 경로·스키마·handler는 구현하지 않았다. Fastify 로컬 API와 공유Zod계약을 계획한다.
 
-## Common rules
+## Authentication and response rules
 
-- 모든 요청은 인증된 호출자를 확인하고 환자·구성원·작업·필드 권한을 검사한다.
-- 환자 경로 앞에는 `/patients/{patientId}`를 붙인다. `/me/patients`와 공개 병원 안내는 별도다.
-- 요청의 patientId와 저장된 visit/document/job/source 소속이 일치해야 한다.
-- 오류 형식: `error.code`, `error.message`, `error.requestId`. 원문·비밀 설정은 메시지에 넣지 않는다.
-- 인증 실패는 401, 권한 거부는 403, 허용 범위에서 없는 자원은 404,
-  잘못된 입력은 400, 입력 버전 충돌은 409, 외부 처리 오류는 502 또는 실패 작업 상태다.
-- 알 수 없는 필드·scope·role은 거부한다. 일반 보호자에게 다른 구성원의 등급을 반환하지 않는다.
-- ID 기반 자원 접근은 자원 존재나 내용이 권한 밖으로 새지 않도록 검사 순서를 통일한다.
+- POST /auth/login은 시드 계정의 이메일·비밀번호를 확인하고 서명 JWT를 반환한다.
+- 서버는 서명·만료·허용알고리즘·issuer/audience를 검증한다. JWT의userId만 신뢰하고 scope/위임은DB에서 읽는다.
+- 환자 API앞에는 /patients/{patientId}, 예외는 /me/patients와 정적 병원 안내.
+- error.code/message/requestId 형식; 401인증,403권한,404허용범위의없음,400입력,409버전충돌,502외부처리오류.
+- 오류·작업응답에 원문·금지블록·내부경로·비밀설정을 넣지 않는다.
+- 모든 외부 응답은 공통assembler를 거친다. 알 수 없는블록·필드는기본거부.
+- schedule 응답: meta + schedule. companion: meta + schedule + companion. full: 셋모두.
+- meta는id/date/dept/hospital/companion만; 민감내용·다른가족scope·거부블록개수는없다.
+- sourceRefs/basisRefs/quote/전체파일/진단/수치/이유/답변/설명/ALERT상세는full전용.
 
-## Endpoints
+## Routes
 
-| Method | Path | 목적·응답 | 주요 권한 |
+| Method | Path | 입력·결과 | 행동 권한 |
 |---|---|---|---|
-| GET | /me/patients | 접근 가능한 환자 목록 | 인증 |
-| GET | /home?dept= | 일정·질문·확인 항목·최근 기록 | scope별 필드 제한 |
-| GET | /timeline?dept= | 일정·공유 기록 | scope별 필드 제한 |
-| POST | /visits/{visitId}/questions | text 입력, 원 질문 저장 | 동행·전체 |
-| GET | /visits/{visitId}/questions | 원 질문·통합 결과 | 동행·전체 |
-| POST | /visits/{visitId}/questions/merge | inputVersion, 통합 결과 또는 작업 ID | 동행·전체 |
-| POST | /visits/{visitId}/briefing | inputVersion, 브리핑 또는 작업 ID | 동행·전체 |
-| GET | /visits/{visitId}/briefing | 허용 필드·근거 인용 | 동행·전체 |
-| POST | /visits/{visitId}/audio-url | 형식·크기 검사 후 업로드 URL | 동행·전체; recordingAllowed |
-| POST | /visits/{visitId}/transcribe | objectRef, inputVersion → 작업 ID | 동행·전체 |
-| POST | /visits/{visitId}/notes | text, inputVersion → 저장·새 버전 | 동행·전체 |
-| POST | /visits/{visitId}/structure | inputVersion → 작업 ID | 동행·전체 |
-| GET | /jobs/{jobId} | status·허용된 결과 참조·실패 코드 | 해당 기능 권한·현행 scope |
-| GET | /visits/{visitId} | 일정 또는 허용된 공유 기록 | scope별 필드 제한 |
-| GET | /sources/{sourceId} | 허용 인용 또는 원본 접근 URL | 동행: 인용만; 전체: 원본 |
-| GET | /alerts | 허용된 확인 항목 | 동행·전체 |
-| POST | /alerts/{alertId}/resolve | 수정·재등록·병원 확인 예정 처리 | 동행·전체; 원본 변경 권한 별도 검사 |
-| GET | /members | 가족별 scope | 환자·위임된 대표 |
-| PUT | /members/{userId}/scope | schedule/accompaniment/full | 환자·위임된 대표 |
+| POST | /auth/login | email/password → accessToken | 시드계정 |
+| GET | /me/patients | 접근가능환자목록 | 인증 |
+| GET | /home?dept= | meta+허용블록·허용개수 | 현행scope |
+| GET | /timeline?dept= | publishedVersion의meta+허용블록 | 현행scope |
+| GET | /visits/{vid} | meta+허용블록, 작성자/관리자는검토본선택가능 | 현행scope+검토권한 |
+| POST | /visits/{vid}/questions | text → id, 공개용text는혼입검증 | companion/full |
+| GET | /visits/{vid}/questions | companion.mergedQuestions, full인경우basisRefs | companion/full |
+| POST | /visits/{vid}/questions/merge | inputVersion → 결과블록또는jobId | companion/full |
+| POST | /visits/{vid}/briefing | inputVersion → 저장블록또는jobId | companion/full |
+| GET | /visits/{vid}/briefing | 허용된briefing블록 | companion/full |
+| POST | /visits/{vid}/audio | multipart 가상파일 → uploadId | companion/full+recordingAllowed |
+| POST | /visits/{vid}/transcribe | uploadId,inputVersion → 202 jobId | companion/full |
+| POST | /visits/{vid}/notes | text,inputVersion → 새버전 | companion/full |
+| POST | /visits/{vid}/structure | inputVersion → 202 jobId | companion/full |
+| GET | /jobs/{jobId} | status/mode/resultVersion/안전한errorCode | 현재기능권한·scope;원문없음 |
+| POST | /visits/{vid}/share | draftVersion,inputVersion,idempotencyKey | 작성자또는환자/위임대표,검증ready |
+| GET | /sources/{sourceId} | full근거인용/원본다운로드 | full;소속검사 |
+| GET | /alerts | 불일치·확인상세 | full |
+| POST | /alerts/{aid}/resolve | edit_note/reupload/confirm_hospital | full;원본변경권한추가검사 |
+| GET | /members | 가족·scope | 환자/위임대표 |
+| PUT | /members/{uid}/scope | schedule/companion/full | 환자/위임대표 |
+| GET | /members/{uid}/share-log | 공유시작·범위변경기록 | 환자/위임대표 |
+| GET | /hospitals/{hid} | 가상위치·약도·더미경험 | 정적안내 |
 
-별도 `/share` 경로는 기본안에서 두지 않는다. 검증된 정리 저장이 자동 공유 시점이다.
-조회 권한과 변경 권한은 독립적으로 검사하며 full인 일반 보호자도 scope를 변경할 수 없다.
+POST /audio-url 대신 직접업로드를사용한다. cloud presigned URL은API계약에없다.
+전사완료/정리완료의job결과는raw전사가아니라허용된resultVersion참조다.
+share는민감혼입blocked·입력버전불일치에서409로거부하고ready검토본만공개한다.
+source/download는작성자여도companion이면403이다.
 
-## Response projections
+## Generation and reading
 
-- Schedule: visitId, scheduledAt, nextAppointments, hospitalLocation.
-- Accompaniment: 일정 + dept, companion, permittedMedicationChanges, precautions,
-  easySummary, permittedChanges, questions, briefing, safeEvidenceExcerpts.
-- Full: 일정 + 전체 진료 정리, 진단명·수치 등 원문 기록, 허용 원본 참조.
-- PrivateNote는 위 DTO 어디에도 자동 포함하지 않는다. 전용 환자 경로에서만 반환한다.
-- schedule 홈에는 질문·확인 항목 개수·최근 진료 요약·브리핑 링크를 반환하지 않는다.
-- 동행용 변환 결과에도 원문·의료 판단·금지 정보가 포함됐는지 검사한다.
+생성요청은정해진모든블록을만들고서버에서검증·저장한다. 반환은호출자의허용블록만.
+GET·scope변경은저장된블록선택만하고LLM/STT를호출하지않는다.
+새field는full에두고화이트리스트스키마에정의전까지낮은범위로반환하지않는다.
+low항목은id/needsCheck, full의sourceRefs[id]로원본을연결한다.
+근거가없으면값null·needsCheck=true. 프론트는full블록이있을때만원문버튼을그린다.
 
-## Evidence-bearing fields
+## Review and published views
 
-AI 출력 항목은 `value`, `evidenceRefs`, `needsConfirmation`을 공통으로 가진다.
-근거가 없으면 value는 null, evidenceRefs는 빈 목록, needsConfirmation은 true다.
-질문 통합은 originalQuestionIds·aiAdded를 보존한다.
-인용에 허용 밖 정보가 섞이면 인용을 반환하지 않고 확인 상태를 표시한다.
-입력·출력의 실제 JSON 스키마는 구현 작업에서 위 규칙에 따라 작성한다.
+일반가족조회는publishedVersion, 검토는작성자/관리자의draftVersion을사용한다.
+검토자가companion이어도full은반환하지않는다. 공유전companion문장을확인할수있다.
+보안검증은사용자의공유확인과독립적이며저장검증·현행권한검증을버튼으로우회할수없다.
+단순미해결불일치는확인표시를유지하며공유할수있고민감혼입은재생성/수정·재검증전공유불가다.
 
-## Asynchronous work
+## Optional phase 2
 
-작업 시작은 202와 jobId·status를 반환한다.
-조회는 queued/running/succeeded/failed, inputVersion, 허용 결과 참조 또는 오류 코드를 반환한다.
-입력 버전과 작업 종류를 중복 판별에 사용하고 재시도를 별도 attempt로 추적한다.
-프론트는 종료 상태에서 폴링을 중단하고 실패 시 재시도 안내를 제공한다.
-음성 전사는 시작 Lambda에서 끝까지 기다리지 않고 완료 이벤트·상태 확인 경로로 마무리한다.
-
-## Phase 2 additions
-
-문서 업로드·판독·수정, 비공개 메모, 의사용 화면, 환자 위임·녹음 설정,
-방문 경험 입력은 구현 범위 확정 후 별도 계약을 추가한다.
+DELETE /members/{uid} 공유중단, POST /docs 직접업로드, /docs/{did}/extract·PATCH수정,
+/private-notes 환자전용, /doctor-view 환자전용, PUT /settings 위임·녹음설정,
+/hospitals/{hid}/experiences 익명입력, /flows 같은과흐름을추가한다.
+별도easy-summary API는없고저장된companion.easySummary를화면24에서재사용한다.
+동의·초대·가입·일정등록은화면만이므로실제동작API를추가하지않는다.

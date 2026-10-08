@@ -2,57 +2,62 @@
 
 **Branch**: `main` | **Date**: 2026-10-09 | **Spec**: [spec.md](spec.md)
 
-**Input**: `specs/001-baton-mvp/spec.md`
+**Input**: `specs/001-baton-mvp/spec.md`; [최종 기획안](../../docs/baton_planning_최종.md)
 
 ## Summary
 
-보호자가 바뀌어도 같은 환자·진료과의 맥락을 이어받는 모바일 웹 MVP를 구현한다.
-React 웹, TypeScript Lambda, 공유 계약을 npm workspaces로 관리한다.
-이번에는 명세·설계·빈 디렉터리·설정만 만들며 앱·API·AI·AWS 자원은 구현하지 않는다.
-구현은 해커톤 당일 시작하고 1단계 완주 후 필요한 2단계 기능을 추가한다.
+로컬 서버·SQLite·시드 로그인에 AI만 AWS를 사용하는 모바일 웹 MVP다.
+사용자는 정리 결과 확인 후 공유하기로 확정한다. 배포·AWS 서버리스 자원 생성은 하지 않는다.
+AI 생성은 schedule/companion/full의 비중복 블록을 한 번에 저장한다.
+서버는 현행 구성원·scope로 허용 블록만 조회·조립하고 읽기·범위 변경에 AI를 호출하지 않는다.
+이번 작업은 문서 개정·작업 목록 생성이며 앱·DB·테스트·AI 호출은 아직 미구현이다.
 
 ## Technical Context
 
-**Language/Version**: TypeScript 예정, Node.js 22.12+ / 22.x, npm 10.x.
-로컬 확인 값은 Node 22.23.2, npm 10.9.8. 도구·라이브러리 버전은 실제 구현 시 lockfile에 고정한다.
+**Language/Version**: TypeScript, Node 22.x (확인 환경 22.23.2), npm 10.x.
 
-**Primary Dependencies**: React·Vite, AWS SDK, esbuild, 검증 스키마 도구 예정.
-현재 설치한 런타임 의존성은 없고 workspace 관계만 정의했다.
+**Primary Dependencies**: React·Vite, Fastify 5, @fastify/jwt, better-sqlite3,
+계약 검증 Zod, AWS SDK v3의 Bedrock Runtime·Transcribe·S3 클라이언트.
+의존성은 구현 시작 시 설치·호환성을 확인하고 lockfile에 고정한다.
 
-**Storage**: DynamoDB 환자 단위 항목, 비공개 S3 음성·문서, Cognito 계정.
+**Storage**: 로컬 SQLite와 비공개 로컬 업로드 폴더.
+진료 메타데이터와 visit_blocks를 분리한다. DB 파일·업로드 폴더를 웹 정적 경로에 두지 않는다.
+Transcribe 배치의 임시 S3 입력·결과 경로만 기존 제공 버킷을 사용하며 앱의 영구 저장은 로컬이다.
 
-**Testing**: 권한·AI 입력·비교는 백엔드 검증, 핵심 흐름은 브라우저 E2E;
-실제 테스트 도구와 코드는 구현 작업에서 추가한다.
+**Testing**: Vitest로 계약·권한·repository·AI 저장 검증,
+Fastify inject로 HTTP 직접 호출, Playwright로 시드 E2E.
+가짜 provider·spy로 GET와 범위 변경의 AI 호출 0회를 확인한다.
 
-**Target Platform**: 모바일 우선 브라우저, 서울 리전 AWS Lambda `nodejs22.x` 계획.
+**Target Platform**: 로컬 브라우저 Vite + localhost Fastify API.
+AWS는 Bedrock·Transcribe 호출에만 사용하고 서울 리전 in-region을 기본으로 한다.
 
-**Project Type**: 웹앱 + 서버리스 API; 별도 AI 서비스 배포 없음.
+**Project Type**: npm workspaces(web/api/contracts)의 로컬 웹앱; 별도 AI 서비스 없음.
 
-**Performance Goals**: 30초 브리핑 읽기, 데모 2회 완주.
-긴 작업은 즉시 작업 ID 응답 후 2~3초 간격 조회를 기본안으로 두고 종료 상태에서 중단한다.
+**Performance Goals**: B의 30초 브리핑·두 시연 경로 2회 완주.
+긴 작업은 로컬 jobs 테이블·작업 ID·2~3초 폴링으로 처리하고 종료 상태에서 중단한다.
 
-**Constraints**: 가상 자료만 사용, 서버 권한 검사, 진료과별 입력, 원문 근거,
-자동 공유 전 출력 검증, 비공개 메모 제외, 서울 리전 기본, 당일 약 5시간 구현.
+**Constraints**: 당일 약5시간·4명; 가상 자료만; no deployment;
+민감 정보 혼입이면 공유 보류; 원문·인용은 full; GET·scope 변경 AI 호출 금지.
 
-**Scale/Scope**: 환자 1명·계정 3개·내과 이전 두 기록·예정 진료·다른 과 비교 기록의 데모.
-추가 사용자 역할·번역·푸시·병원 연동은 이번 범위 밖이다.
+**Scale/Scope**: 환자+A(full, lead)+B(companion)+C(schedule) 4계정,
+내과 이전 두 기록·예정 진료와 정형외과 비교 기록. 관찰은 시드 고정.
 
 ## Constitution Check
 
-*GATE: 설계 전·후 점검 결과 모두 PASS (설계 준수, 구현 완료를 의미하지 않음).*
+*GATE: 설계 전·후에 핵심 원칙을 유지하고 아래 사용자 승인 기술 예외를 기록했다.*
 
-| 원칙 | 설계 근거 | 결과 |
+| 원칙·제약 | 대응 | 결과 |
 |---|---|---|
-| I. 인수인계 | 같은 환자·진료과의 질문·브리핑·다음 기록 흐름 | PASS |
-| II. 근거 있는 AI | 출력 검증·원문 접근·빈 값·코드 비교·의료 판단 금지 | PASS |
-| III. 환자 통제 | 공통 권한 검사·등급별 투영·비공개 메모·위임 검사 | PASS |
-| IV. 접근성·녹음 표시 | 전역 글씨 크기·고대비, 직접 녹음 단계의 허용·상태 표시 | PASS |
-| V. 검증 가능한 데모 | 가상 자료·저장 대체 결과 구분·작업 상태·범위 구분 | PASS |
+| I. 인수인계·동일 과 | patientId·dept로 생성 입력 제한 | PASS |
+| II. 근거·의료 판단 금지 | 내부 모든 항목 근거, 참조는 full에만 저장·응답 | PASS |
+| III. 환자 통제·서버 검사 | 현재 관계→허용 kind 조회→화이트리스트 조립; 파일·작업에도 적용 | PASS |
+| IV. 접근성·녹음 | 흰 배경 고대비·3단계 글씨, 직접 녹음의 허용·상태 검사 | PASS |
+| V. 비동기·검증 데모 | 로컬 jobs 유지, live/fixture 모드 표시·공유 전 검증 | PASS |
+| Cognito·Lambda·DynamoDB·S3 기본 방향 | 사용자 선택의 로컬 서버·SQLite·시드 인증 | 승인된 기술 예외 |
 
-동행 범위·자동 공유의 MVP 기본안은 명세의 Assumptions에 기록했다.
-헌장의 실정보 처리 TODO는 실제 사용 전 확인 항목으로 유지한다.
-Guardrails 교차 리전은 기본안에서 사용하지 않고 서울 리전 호출·프롬프트·출력 검증을
-계획한다. 모델 호출 가능 여부와 한국어 금지 출력 차단은 실제 계정에서 검증해야 한다.
+헌장 v1.0.0은 유지한다. 원래 기획안은 역사 자료이고 이번 계획의 최신 근거는 최종본이다.
+예외는 이번 가상 데이터 로컬 해커톤 데모에 한정하고 실제 정보 처리·배포 검토 전에 재평가한다.
+원문 근거 저장 요구는 full.sourceRefs로 유지하며 낮은 scope에서 근거를 숨기는 것을 근거 미저장으로 해석하지 않는다.
 
 ## Project Structure
 
@@ -64,56 +69,84 @@ specs/001-baton-mvp/
 ├── plan.md
 ├── research.md
 ├── data-model.md
+├── contracts/api.md
 ├── quickstart.md
-├── contracts/
-│   └── api.md
-└── checklists/
-    └── requirements.md
+├── checklists/requirements.md
+└── tasks.md
 ```
-
-`tasks.md`는 아직 없다. 다음 `$speckit-tasks`에서 명세·계획에 연결된 작업을 생성한다.
 
 ### Source Code (repository root)
 
 ```text
-apps/
-├── web/
-│   ├── public/hospital/
-│   └── src/{app,features,components,lib,styles,mocks}/
-└── api/
-    ├── src/{handlers,modules,auth,ai,adapters,workers,shared}/
-    └── tests/
+apps/web/src/{app,features,components,lib,styles,mocks}/
+apps/api/src/
+├── app.ts                    # Fastify 조립 (향후)
+├── server.ts                 # 로컬 HTTP 시작 (향후)
+├── handlers/                 # HTTP routes (기존 자리 재사용)
+├── modules/                  # members·visits·questions·briefing·summaries·alerts·jobs
+├── auth/                     # JWT 검증·환자 관계·역할·scope·행동 정책
+├── adapters/                 # SQLite·로컬 files·Bedrock·Transcribe·fixture
+├── ai/{prompts,pipelines,safety}/
+├── workers/                  # 로컬 작업 runner
+└── shared/                   # 설정·오류·로그
+apps/api/tests/
 packages/contracts/src/
-infra/
 fixtures/{seed,audio,documents,expected}/
 scripts/
 tests/e2e/
+infra/                        # 이전 AWS 예시 보존; 현재 구현 대상 아님
 ```
 
-**Structure Decision**: 화면은 feature별로, 백엔드는 기능 모듈별로 묶는다.
-외부 진입점은 handlers, 오래 걸리는 작업은 workers, AWS 연결은 adapters에 둔다.
-AI 파이프라인은 백엔드 내부에 두며 사용자 인증·출력 공개는 API 경로를 통해 수행한다.
-공유 contracts에는 외부 요청·응답·검증 스키마만 두고 DB 항목·권한 구현을 넣지 않는다.
-빈 디렉터리는 `.gitkeep`으로 Git에서 보존한다.
+**Structure Decision**: 기존 빈 폴더를 활용해 HTTP 진입점만 로컬 서버용으로 계획한다.
+AWS adapters는 AI SDK에만 한정한다. DB·인증·파일 저장은 로컬 adapters로 교체한다.
+아직 app.ts·server.ts·schema.sql 등 코드 파일은 만들지 않았다.
+
+## Generation, Storage, Reading
+
+1. 생성 경로는 서버 내부에서 같은 patientId·dept의 적법한 입력만 가져온다. 비공개 메모는 제외한다.
+2. Bedrock tool input으로 블록 구조를 유도하되 계약·근거·금지 출력·문자열 혼입을 서버에서 검증한다.
+3. 생성된 공통 메타와 세 kind 블록을 같은 version으로 트랜잭션 저장한다. 검증 실패 결과는 공유 후보가 아니다.
+4. 조회는 JWT의 userId로 현재 membership을 조회한 뒤 scope→kind 허용표로 SQL을 실행한다.
+5. 가족 조회는 publishedVersion, 작성자·관리자 검토는 draftVersion의 자기 허용 블록을 선택한다.
+6. POST share는 입력 버전·검증 상태·공유 권한을 다시 검사하고 publishedVersion·sharelog를 원자적으로 저장한다.
+7. scope 변경은 membership·sharelog를 트랜잭션 변경한다. 프론트는 이전 환자 응답 캐시를 비우고 재조회한다.
+
+일정만은 meta+schedule, 동행은 meta+schedule+companion, 전체 내용은 셋 모두다.
+거부 블록은 통째로 가져와 삭제하지 않는다. full 자료를 동행용 AI 호출로 재요약하지 않는다.
+원문 파일은 인증된 full 다운로드 경로에서만 반환한다.
+
+## AI and Transcription
+
+- LLMProvider/TranscriptionProvider를 adapters 뒤에 두고 fixture 결과도 동일 검증을 통과시킨다.
+- Bedrock 후보 모델은 `anthropic.claude-sonnet-5`, 서울 in-region을 사용한다. 계정 접근·실제 호출은 별도 확인한다.
+- tool use를 스키마 준수 보장으로 표현하지 않는다. 모델 카드의 Structured outputs 미지원에 따라
+  tool input 존재·계약·근거 검증 후 최대 1회 재시도하고 계속 실패하면 failed/공유 보류한다.
+- companion뿐 아니라 schedule·질문·오류·보조 응답에도 금지 full 값이 섞이는지 확인한다.
+- 한국어 표현 변형·약 이름에서의 진단 추론은 문자열 검사만으로 막을 수 없으므로 모의 평가와 알려진 한계를 기록한다.
+- Transcribe는 기존 제공 S3 버킷으로 가상 음성을 임시 staging하고 완료 결과를 로컬에 저장한다.
+  버킷·권한이 없거나 호출이 실패하면 준비 전사본으로 전환해 fixture임을 표시한다. 새 AWS 인프라를 배포하지 않는다.
 
 ## Implementation Sequence
 
-| 순서 | 구현 작업 | 완료 기준 |
+| 구간 | 우선순위·작업 | 검증 |
 |---|---|---|
-| 1 | 실행 도구·프론트 진입점·백엔드 빌드·계약 스키마 | 실제 앱 실행·타입 검사·빌드 명령이 동작 |
-| 2 | 일관된 시드·인증·구성원·필드 정책·원문 접근 | 역할별 직접 호출·작업 조회·파일 검증 통과 |
-| 3 | 홈·타임라인·전역 글씨 크기·고대비 | 계정별 조회와 모든 구현 화면 접근성 확인 |
-| 4 | 질문·통합·브리핑·허용 근거 표시 | B가 내과 맥락을 이어받고 다른 과·금지 정보 제외 |
-| 5 | 가상 음성 업로드·전사·메모·작업 상태 | 실패·재시도·저장 전사 대체 사용을 구분 |
-| 6 | 진료 정리·출력 검증·코드 비교·자동 공유 | 완료된 검증 결과만 공유, 확인 항목 유지 |
-| 7 | E2E·모의 자료 평가·데모 리허설 | 명세 SC 기준 검증, 실제 평가 수치 기록 |
-| 8 | 필요한 2단계 보강 | 1단계 완주 후 사진·직접 녹음·비공개 메모 등 추가 |
+| Setup | 의존성·실제 실행 명령·설정·SQLite 준비 | web/api/contracts 타입 검사·빌드 |
+| Foundation | 4계정·관계·JWT·블록 repository·jobs·공통 정책 | 금지 kind 미조회·위임 해제·비구성원 거부 |
+| US1 | 질문·저장 브리핑·B 인수인계 | 변경·질문, 읽기 AI0회 |
+| US2 | 범위 관리·공유 기록·동행/일정 화면 | 환자 변경→B/C 다음 조회, 일반 보호자403 |
+| US3 | 음성·메모·정리·누출 검사·검토·공유·full불일치 | 보류 우회 불가, 환자/A로 원문 확인 |
+| US4 | 접근성·정적 병원 | 가장 큰 글씨·흰 배경 고대비 |
+| US5/US6 | 선택2단계·고지 화면 | 핵심 완주 후 시간 남는 기능만 |
+| Final | 두 경로 리허설·모의 평가 | 검사 전후 누출률·실제 분모 기록 |
 
-프론트는 동일 계약의 모의 응답으로 시작하고 백엔드는 같은 시드·허용표를 사용한다.
-API 개발자는 데이터·권한·인프라, AI 담당자는 파이프라인·비교·평가,
-프론트 담당자는 화면·접근성, 데모 담당자는 시드·시나리오·리허설을 맡는 분담을 제안한다.
+4명 분담: 프론트(US1·US4), 로컬 API/DB/인증(Foundation·US2), AI/검증(US3), 시드/데모/평가.
+2단계는 5시간 내 필수 완료 대상이 아니다. 최소 시연은 US1+US2와 US3의 파일 변환·정리·공유·비교다.
 
 ## Complexity Tracking
 
-헌장 위반 예외 없음. 별도 AI 서비스·마이크로서비스·공유 UI 패키지·추가 빌드 오케스트레이터는
-초기에 추가하지 않는다. 실패 큐 등 비동기 안정화 자원은 필요한 실행 흐름을 먼저 정의한다.
+| Violation | Why Needed | Simpler Alternative Rejected Because |
+|---|---|---|
+| AWS 기반 기본 방향을 로컬 서버·SQLite·JWT로 대체 | 사용자가 최종안 질문에서 직접 선택; 배포 없는 가상 데모에 한정 | Cognito·Lambda·DynamoDB 구성은 로컬 시연 준비 비용이 커 선택하지 않음 |
+
+이 예외의 종료 시점은 가상 해커톤 데모 범위를 넘어 실제 서비스·배포를 설계할 때다.
+보안·권한·근거·비공개 메모 원칙은 예외 대상이 아니다.

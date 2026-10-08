@@ -7,9 +7,11 @@
 ## 문서
 
 - [프로젝트 헌장](.specify/memory/constitution.md)
-- [원본 기획안](docs/baton_planning_2026-10-09_04-15-10_KST.md)
+- [최종 기획안](docs/baton_planning_최종.md) · [변경 검토](docs/planning-review.md)
+- [이전 기획안](docs/baton_planning_2026-10-09_04-15-10_KST.md)
 - [MVP 명세](specs/001-baton-mvp/spec.md)
 - [구현 계획](specs/001-baton-mvp/plan.md)
+- [구현 작업 목록](specs/001-baton-mvp/tasks.md)
 - [설계 조사](specs/001-baton-mvp/research.md)
 - [데이터 모델](specs/001-baton-mvp/data-model.md)
 - [API 계약](specs/001-baton-mvp/contracts/api.md)
@@ -21,9 +23,9 @@
 
 ```text
 apps/web/             모바일 우선 React/Vite 프론트 자리
-apps/api/             TypeScript Lambda·권한·AI·비동기 처리 자리
+apps/api/             로컬 Fastify·SQLite·JWT·AI·비동기 처리 자리
 packages/contracts/   공유 요청·응답·검증 스키마 자리
-infra/                AWS SAM·Hosting 설계와 설정 예시
+infra/                이전 AWS 배포 예시 보존, 현재 구현 대상 제외
 fixtures/             가상 시드·음성·문서·정답 자료 자리
 scripts/              환경 점검·시드·평가 스크립트 자리
 tests/e2e/            핵심 데모 검증 자리
@@ -43,11 +45,13 @@ npm ls --workspaces --depth=0
 
 이 명령은 로컬 workspace를 연결할 뿐 앱을 실행하지 않는다.
 React·TypeScript·Vite·AWS SDK·테스트 도구와 실제 dev/build/test 명령은 기능 구현 때 추가한다.
-설치되지 않은 SAM과 존재하지 않는 Lambda handler를 배포 설정에 선언하지 않았다.
+최종 구성은 로컬 서버·SQLite·시드 로그인, AI만 AWS 사용이다. 배포는 하지 않는다.
+정리 결과는 검토 후 공유하기로 확정하며 원문·인용은 full에만 제공한다.
 
 ## 다음 구현 단계
 
-`$speckit-tasks`로 명세·계획에 연결된 작업을 만든 뒤 해커톤 당일 구현한다.
+생성한 `tasks.md`의 Setup/Foundation부터 해커톤 당일 구현한다.
+1단계 두 시연 경로를 완주한 뒤 선택2단계를 추가한다.
 새 checkout에서는 다음 값을 지정해 Spec Kit가 main에서도 feature를 찾게 한다.
 
 ```bash

@@ -1,57 +1,46 @@
-# Research: 바통 MVP 설계 결정
+# Research: 최종 기획안 반영
 
-**Date**: 2026-10-09
-**Method**: 기획안·헌장·공식 문서의 읽기 전용 조사; 실제 AWS 호출은 하지 않음.
+**Date**: 2026-10-09. 문서·공식 자료 조사이며 AWS 호출·설치·배포는 하지 않았다.
 
-## Node·언어
+## 로컬 인프라
 
-- **Decision**: 로컬에 설치된 Node 22.23.2를 기준으로 Node 22.12+ / 22.x와 npm 10.x를 사용한다. 구현 언어는 TypeScript.
-- **Rationale**: 현재 환경과 프론트·백엔드를 통일하고 환경 교체 없이 뼈대를 공유한다. Vite 요구 조건과 Lambda 지원 런타임을 확인했다.
-- **Alternatives considered**: Node 24는 지원 기간 측면에서 다음 후보. 다른 언어는 공유 계약·개발 도구를 별도로 구성해야 한다.
-- **Sources**: [Node 릴리스](https://nodejs.org/en/about/previous-releases), [Lambda 런타임](https://docs.aws.amazon.com/lambda/latest/dg/lambda-runtimes.html), [Vite 가이드](https://vite.dev/guide/).
+- **Decision**: TypeScript Fastify 5, SQLite better-sqlite3, @fastify/jwt, React/Vite.
+- **Rationale**: 사용자가 로컬 서버·SQLite·시드 로그인과 AWS AI를 선택했다. 기존 모듈 구조를 유지하고 HTTP·DB·인증을 로컬로 바꾼다.
+- **Alternatives considered**: AWS 서버리스는 이번 범위 제외. node:sqlite는 현재22.23.2에 있지만 experimental이므로 우선 선택하지 않는다. better-sqlite3 설치·네이티브 바인딩은 Setup에서 확인한다.
+- **Sources**: [Fastify TypeScript](https://fastify.dev/docs/latest/Reference/TypeScript/), [better-sqlite3](https://github.com/WiseLibs/better-sqlite3), [JWT plugin](https://github.com/fastify/fastify-jwt), [Node SQLite](https://nodejs.org/download/release/v22.23.2/docs/api/sqlite.html).
 
-## Workspaces·설정 뼈대
+## 저장 블록과 권한
 
-- **Decision**: npm workspaces 3개(`@baton/web`, `@baton/api`, `@baton/contracts`)와 단일 lockfile. 모두 private.
-- **Rationale**: 로컬 계약 패키지 연결을 관리하고 설정 규모를 줄인다. 빈 src에는 빌드 결과 엔트리를 선언하지 않는다.
-- **Alternatives considered**: pnpm·별도 저장소·추가 빌드 도구는 현재 규모에서 도입하지 않는다.
-- **Sources**: [npm workspaces](https://docs.npmjs.com/cli/using-npm/workspaces/), [package.json](https://docs.npmjs.com/cli/configuring-npm/package-json/).
+- **Decision**: meta와 visit_blocks(patientId,visitId,version,kind,payload)를 분리한다. scope는 schedule/companion/full, kind도 같은 세 값이다.
+- **Rationale**: 명시적 허용 kind 조회·화이트리스트 응답을 한 곳에 둔다. 원문·인용·근거는 full에만 있고 새 필드도 full 기본이다.
+- **Alternatives considered**: 전체 레코드를 읽고 필드를 제거하면 누락 가능성이 크다. DynamoDB ProjectionExpression도 물리적 격리·DB 자체 사용자 권한으로 볼 수 없다.
+- **Source**: 최종 기획안8.2·8.3; [DynamoDB projection](https://docs.aws.amazon.com/amazondynamodb/latest/developerguide/Expressions.ProjectionExpressions.html).
 
-## 프론트·환경 변수
+## 공유 시점과 시드
 
-- **Decision**: React + Vite. 이번에는 generator를 실행하지 않고 폴더·JSON 설정만 둔다.
-- **Rationale**: 현재 요청은 기능 코드 없는 구조 생성이다. 브라우저 환경 변수는 공개 식별자만 사용한다.
-- **Alternatives considered**: Next.js는 이 MVP의 서버 렌더링 요구가 없어 선택하지 않는다.
-- **Sources**: [Vite](https://vite.dev/guide/), [환경 변수](https://vite.dev/guide/env-and-mode), [공개 assets](https://vite.dev/guide/assets.html).
+- **Decision**: 사용자 검토 후 POST share, 4시드 계정, 관찰 메모 시드, B는companion으로 이어받고 불일치 상세는 환자/A가 확인.
+- **Rationale**: 사용자가 수동 확정을 선택했고 final의 원문 full 제한을 두 시연 경로에서 유지한다.
+- **Alternatives considered**: 기존 자동 공유·B의 안전한 인용 제공은 이번 선택과 충돌해 제거한다.
+- **Source**: 사용자 답변, 최종 기획안12.1·12.2·12.13.
 
-## 백엔드·비동기
+## AWS AI·모델
 
-- **Decision**: 기능별 TypeScript Lambda를 SAM·esbuild로 묶는다. 작업 ID·상태·결과 조회를 사용한다.
-- **Rationale**: 전사·정리의 대기시간을 HTTP 요청과 분리하고 기획안 AWS 구성을 유지한다.
-- **Alternatives considered**: 별도 장기 실행 서버·독립 AI 서비스는 초기 범위에서 제외한다.
-- **Source**: [SAM TypeScript 빌드](https://docs.aws.amazon.com/serverless-application-model/latest/developerguide/serverless-sam-cli-using-build-typescript.html).
+- **Decision**: Bedrock Converse tool input 유도 + 서버 Zod·근거·혼입 검증, 실패 시 최대1회 재시도. 기본 Guardrails 교차 리전은 사용하지 않는다.
+- **Rationale**: Sonnet5는 Converse와 서울 in-region 후보지만 모델 카드상 Structured outputs는 미지원이므로 스키마 강제를 보장으로 쓰지 않는다.
+- **Alternatives considered**: Anthropic 직접 호출은 사용자가 AWS AI를 선택해 제외. 교차 리전 Guardrails는 정책 변경 없이 켜지 않는다.
+- **Sources**: [AWS Sonnet5 모델 카드](https://docs.aws.amazon.com/bedrock/latest/userguide/model-card-anthropic-claude-sonnet-5.html), [서울 in-region 발표](https://aws.amazon.com/blogs/machine-learning/introducing-anthropic-models-on-amazon-bedrock-for-in-region-inference-in-seoul-and-singapore/).
+- **Still to verify operationally**: 실제 계정 접근·쿼터·샘플 호출; 검증된 저장 결과 fallback을 마련한다.
 
-## 권한·공유 기본안
+## STT·로컬 작업
 
-- **Decision**: 3등급 허용표, 현행 권한 조회, 검증된 정리 결과 자동 공유. 동행에게는 허용 항목의 안전한 인용만 제공한다.
-- **Rationale**: 기획안 확정 결정과 헌장을 우선한다. 전체 원문 링크가 동행 금지 정보를 노출하지 않도록 한다.
-- **Alternatives considered**: 2등급은 확정 방향과 충돌; 별도 확인 후 공유는 기존 확정 결정과 달라 기본안에서 제외.
-- **Source**: 기획안 8.1·8.2·13·14.3; 명세의 허용표와 Assumptions.
+- **Decision**: Transcribe의 기존 버킷 staging → 로컬 전사 저장. 로컬 jobs 상태·폴링을 유지한다.
+- **Rationale**: 앱 저장·인증은 로컬로 하고 AWS는 AI 처리용으로 제한한다. staging은 배치 STT의 부속 연결이며 새 버킷 배포는 하지 않는다.
+- **Alternatives considered**: 클라우드 큐·Lambda는 제외. 전사본만 쓰는 시연은 fixture로 명확히 표시하고 실제 변환 성공으로 보고하지 않는다.
+- **Source**: 최종 기획안10.4; 실제 Transcribe 버킷 접근은 환경 점검 작업이다.
 
-## AI 리전·안전장치
+## 미정 세부 항목의 보수적 기본안
 
-- **Decision**: 가상 데이터 MVP는 서울 리전 내 가능한 모델 호출과 프롬프트·출력 검증을 기본안으로 계획한다. 교차 리전 Guardrails는 사용하지 않는다.
-- **Rationale**: 리전 제약을 유지하고 기획안 9.3의 대안 (b)를 선택한다. 이는 안전성 시험 통과를 의미하지 않는다.
-- **Alternatives considered**: Guardrails 교차 리전 처리 허용은 별도 정책 변경·실제 검증 후 검토한다.
-- **Dependencies**: 실제 모델 ID·호출 권한·한국어 금지 출력 차단을 당일 확인. ID는 환경설정에 두며 기획안의 특정 모델 접근성을 단정하지 않는다.
-
-## 병원 안내
-
-- **Decision**: 공개 가능한 가상 병원 위치·정적 약도부터 사용한다. 외부 지도 SDK 연결은 구현 시 접근성·계정 조건을 확인한 뒤 선택한다.
-- **Rationale**: 핵심 인수인계 흐름과 무관한 지도 제공자 결정이 구조 생성을 막지 않는다.
-- **Alternatives considered**: 동선 계산·길찾기는 확정 제외 범위다.
-
-## 조사 결과의 한계
-
-외부 문서 확인은 라이브러리 설치·AWS 호출·배포 성공을 의미하지 않는다.
-모델·지도 제공자 설정과 실제 처리 요건은 구현·운영 확인 항목이며, 현재 설계에 미해결 NEEDS CLARIFICATION 표시는 없다.
+- **Decision**: 동행 watch/prep/alerts/OBS 상세는 full 유지, 약 이름은 기존 허용 유지, 글씨·대비는 브라우저 저장.
+- **Rationale**: 새 항목은 full 기본이며 미정 범위를 임의로 확대하지 않는다. 약 이름의 추론 한계는 데모에 기록한다.
+- **Alternatives considered**: 동행의 모든 의료 문자열을 임의로 재요약하는 조회는 금지한다.
+- **Dependencies**: 지도 제공자 실제 SDK는 가상 위치 표시 기본 후 확인. 실정보 동의·법률은 이번 가상 데모 범위 밖.
