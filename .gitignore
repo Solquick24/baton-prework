@@ -1,0 +1,19 @@
+# Machine credentials and agent environment
+.aws/
+.codex/
+
+# Local environment and deployment values
+.env
+.env.*
+!.env.example
+samconfig.toml
+
+# Dependencies and generated output
+node_modules/
+dist/
+build/
+coverage/
+.aws-sam/
+*.tsbuildinfo
+*.log
+.DS_Store

@@ -1,0 +1,9 @@
+{
+  "name": "@baton/web",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@baton/contracts": "0.0.0"
+  }
+}

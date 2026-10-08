@@ -1,0 +1,8 @@
+# Configuration-only example. No deployable SAM template exists yet.
+version = 0.1
+
+[default.deploy.parameters]
+stack_name = "baton-mvp"
+region = "ap-northeast-2"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
